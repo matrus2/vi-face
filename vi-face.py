@@ -59,6 +59,8 @@ class GpioHandler(object):
     def my_callback(self, channel):
         print("button:", channel, " pressed in gpioHandler")
         time.sleep(1)
+        # self.ldc_screen.message("               \n                ")
+        # self.ldc_screen.clear()
         if not GPIO.input(self.acquire_button):
             print("button hold")
             st = str(datetime.datetime.utcnow()).replace('.', '_')
@@ -104,9 +106,11 @@ class GpioHandler(object):
                     name = self.label_encoder.classes_[j]
                     text = "{}: {:.2f}%".format(name, proba * 100)
                     print(text)
-                    if 'Unknown' not in text:
+                    if 'unknown' not in text:
                         self.bot.send_slack_message_sandwich()
-                    self.ldc_screen.message("  Recognized\n" + text)
+                    self.ldc_screen.message("Recognized\n" + text)
+                    time.sleep(5)
+                    self.ldc_screen.clear()
 
                 self.rawCapture.truncate(0)
 
