@@ -10,6 +10,8 @@ import cv2
 import time
 import numpy as np
 from led import HD44780
+from slack import Slack
+
 
 def signal_handler(sig, frame):
         print('You pressed Ctrl+C!')
@@ -21,6 +23,7 @@ class GpioHandler(object):
         self.acquire_button = 17
         GPIO.setmode(GPIO.BCM)
         GPIO.setwarnings(False)
+        self.ldc_screen = HD44780()
         self.camera = PiCamera()
         self.camera.resolution = (1920, 1080)
         self.rawCapture = PiRGBArray( self.camera)
@@ -39,7 +42,7 @@ class GpioHandler(object):
         self.recognizer = pickle.loads(open("output/recognizer.pickle", "rb").read())
         self.label_encoder = pickle.loads(open("output/le.pickle", "rb").read())
 
-        self.ldc_screen = HD44780()
+        self.bot = Slack()
 
     def __enter__(self):
         # self.camera.start_preview()
@@ -75,13 +78,11 @@ class GpioHandler(object):
             detections = self.detector.forward()
 
             for i in range(0, detections.shape[2]):
-                # extract the confidence (i.e., probability) associated with the
-                # prediction
+
                 confidence = detections[0, 0, i, 2]
 
                 if confidence > 0.8:
-                    # compute the (x, y)-coordinates of the bounding box for the
-                    # face
+
                     box = detections[0, 0, i, 3:7] * np.array([w, h, w, h])
                     (startX, startY, endX, endY) = box.astype("int")
 
@@ -92,37 +93,22 @@ class GpioHandler(object):
                     if fW < 20 or fH < 20:
                         continue
 
-                    # construct a blob for the face ROI, then pass the blob
-                    # through our face embedding model to obtain the 128-d
-                    # quantification of the face
                     faceBlob = cv2.dnn.blobFromImage(face, 1.0 / 255, (96, 96),
                                                      (0, 0, 0), swapRB=True, crop=False)
                     self.embedder.setInput(faceBlob)
                     vec = self.embedder.forward()
 
-                    # perform classification to recognize the face
                     preds = self.recognizer.predict_proba(vec)[0]
                     j = np.argmax(preds)
                     proba = preds[j]
                     name = self.label_encoder.classes_[j]
-                    # print(proba * 100)
                     text = "{}: {:.2f}%".format(name, proba * 100)
                     print(text)
+                    if 'Unknown' not in text:
+                        self.bot.send_slack_message_sandwich()
                     self.ldc_screen.message("  Recognized\n" + text)
-                    self.rawCapture.truncate(0)
 
-            #         y = startY - 10 if startY - 10 > 10 else startY + 10
-            #         cv2.rectangle(image, (startX, startY), (endX, endY),
-            #                       (0, 0, 255), 2)
-            #         cv2.putText(image, text, (startX, y),
-            #                     cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 255), 2)
-            #
-            # # display the image on screen and wait for a keypress
-            # #         self.rawCapture.truncate(0)
-            #         cv2.imshow("Image", image)
-            #         key = cv2.waitKey(1) & 0xFF
-            #         if key == ord("q"):
-            #             self.rawCapture.truncate(0)
+                self.rawCapture.truncate(0)
 
 
 if __name__ == '__main__':
